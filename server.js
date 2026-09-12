@@ -57,15 +57,48 @@ app.get('/api/home', async (req, res) => {
   }
 });
 
-// المسار المعدل لجلب رابط المشاهدة بدقة عالية
-app.get('/api/watch', async (req, res) => {
+// 1. مسار جلب قائمة السيرفرات المتاحة للحلقة
+app.get('/api/servers', async (req, res) => {
   let targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).json({ success: false, message: 'رابط غير صالح' });
 
   try {
-    // التأكد من تحويل الرابط إلى صفحة التشغيل play.php
     let playUrl = targetUrl.replace('watch.php', 'play.php');
+    const response = await axios.get(playUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+    
+    const $ = cheerio.load(response.data);
+    const servers = [];
 
+    // استخراج أزرار أو خيارات السيرفرات من الصفحة (مثل Megamax وغيرها)
+    $('.servers-list li, .server-item, [data-server], .load-server').each((i, el) => {
+      let serverName = $(el).text().trim();
+      let serverId = $(el).attr('data-id') || $(el).attr('data-server') || i;
+      if (serverName) {
+        servers.push({ name: serverName, id: serverId });
+      }
+    });
+
+    // إذا لم يتم العثور على قائمة سيرفرات محددة، نبحث عن الـ iframes المتاحة أو نضع السيرفر الافتراضي
+    if (servers.length === 0) {
+      servers.push({ name: 'سيرفر المشاهدة الرئيسي (Megamax)', id: 'default' });
+    }
+
+    res.json({ success: true, playUrl, servers });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب السيرفرات' });
+  }
+});
+
+// 2. مسار جلب رابط التشغيل الخاص بالسيرفر المختار
+app.get('/api/watch', async (req, res) => {
+  let playUrl = req.query.url;
+  if (!playUrl) return res.status(400).json({ success: false, message: 'رابط غير صالح' });
+
+  try {
     const response = await axios.get(playUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -75,22 +108,14 @@ app.get('/api/watch', async (req, res) => {
     const $ = cheerio.load(response.data);
     let embedUrl = '';
 
-    // البحث عن أول iframe متاح في الصفحة
     $('iframe').each((i, el) => {
       let src = $(el).attr('src') || $(el).attr('data-src');
       if (src && !src.includes('ads') && !src.includes('analytics')) {
         embedUrl = src;
-        return false; // الخروج من الحلقة عند العثور على أول رابط حقيقي
+        return false;
       }
     });
 
-    // إذا لم يتم العثور على iframe، نبحث في روابط التشغيل البديلة
-    if (!embedUrl) {
-      const altSource = $('video source').attr('src') || $('.server-item').attr('data-url');
-      if (altSource) embedUrl = altSource;
-    }
-
-    // القاعدة الذهبية: إذا استعصى استخراج الرابط، نمرر رابط صفحة التشغيل نفسها لعرضها مباشرة كحاسوب
     if (!embedUrl) {
       embedUrl = playUrl;
     }
@@ -101,12 +126,9 @@ app.get('/api/watch', async (req, res) => {
       embedUrl = `${TARGET_URL}${embedUrl}`;
     }
 
-    return res.json({ success: true, embedUrl });
-
+    res.json({ success: true, embedUrl });
   } catch (err) {
-    // في حال الخطأ، نعيد رابط الصفحة الأصلية مباشرة لضمان عدم ظهور رسالة الخطأ للمستخدم
-    let fallbackUrl = req.query.url.replace('watch.php', 'play.php');
-    return res.json({ success: true, embedUrl: fallbackUrl });
+    res.json({ success: true, embedUrl: playUrl });
   }
 });
 
