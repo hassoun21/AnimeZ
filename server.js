@@ -25,16 +25,39 @@ app.get('/api/home', async (req, res) => {
     });
     const $ = cheerio.load(data);
     const items = [];
-    // جلب البيانات من الموقع
-    $('.stories-container .story-item, .anime-card').each((index, element) => {
-      const title = $(element).find('.title, h3').text().trim();
-      const image = $(element).find('img').attr('src');
-      const link = $(element).find('a').attr('href');
-      if (title && link) {
-        items.push({ id: index + 1, title, image, link });
+
+    // استخراج عناصر الأنمي ذكياً من صور المصغرات
+    $('img').each((index, element) => {
+      const imgUrl = $(element).attr('src') || $(element).attr('data-src') || '';
+      
+      if (imgUrl.includes('/uploads/') || imgUrl.includes('thumb')) {
+        const parentA = $(element).closest('a');
+        const parentDiv = $(element).closest('div');
+        
+        const link = parentA.attr('href') || '';
+        let title = parentA.attr('title') || $(element).attr('alt') || parentDiv.find('.title, h2, h3, span').text().trim();
+        
+        title = title.replace(/\s+/g, ' ').trim();
+        const fullImage = imgUrl.startsWith('http') ? imgUrl : `${TARGET_URL}${imgUrl}`;
+        const fullLink = link.startsWith('http') ? link : `${TARGET_URL}${link}`;
+
+        if (title && title.length > 2) {
+          items.push({
+            id: items.length + 1,
+            title: title,
+            image: fullImage,
+            link: fullLink
+          });
+        }
       }
     });
-    res.json({ success: true, count: items.length, data: items });
+
+    // إزالة التكرار إن وجد
+    const uniqueItems = items.filter((item, index, self) =>
+      index === self.findIndex((t) => t.title === item.title)
+    );
+
+    res.json({ success: true, count: uniqueItems.length, data: uniqueItems });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
