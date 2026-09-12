@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AnimeZ TV</title>
+  <title>AnimeZ TV Edition</title>
   <style>
     body {
       background-color: #121212;
@@ -15,7 +15,7 @@
     }
     h1 {
       color: #ff9800;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
     }
     .search-box {
       margin: 10px auto 25px auto;
@@ -38,7 +38,7 @@
     #status-msg {
       font-size: 18px;
       color: #ff9800;
-      margin-top: 30px;
+      margin-top: 40px;
     }
     .grid {
       display: flex;
@@ -72,6 +72,26 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
+    /* نافذة مشغل الفيديو بملء الشاشة */
+    #player-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      z-index: 9999;
+    }
+    #player-loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #ff9800;
+      font-size: 22px;
+    }
   </style>
 </head>
 <body>
@@ -82,46 +102,43 @@
     <input type="text" id="search-input" placeholder="ابحث عن أنمي...">
   </div>
 
-  <div id="status-msg">جاري الاتصال بالسيرفر، يرجى الانتظار...</div>
+  <div id="status-msg">جاري تشغيل السيرفر السحابي، يرجى الانتظار...</div>
   <div id="anime-list" class="grid"></div>
 
-  <div id="player-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:9999;">
-    <iframe id="video-frame" src="" style="width:100%; height:100%; border:none;" allowfullscreen></iframe>
+  <div id="player-modal">
+    <div id="player-loading">جاري جلب سيرفر المشاهدة...</div>
+    <iframe id="video-frame" src="" style="width:100%; height:100%; border:none; display:none;" allowfullscreen></iframe>
   </div>
 
   <script>
-    const API_URL = 'https://animez-uxsm.onrender.com/api/home';
+    const API_BASE = 'https://animez-uxsm.onrender.com';
     let itemsData = [];
     let filteredData = [];
     let currentIndex = 0;
     let attemptCount = 0;
 
+    // دالة جلب الأنميات مع إعادة المحاولة التلقائية أثناء نوم السيرفر
     async function loadAnime() {
       const statusMsg = document.getElementById('status-msg');
       attemptCount++;
       statusMsg.innerText = `جاري تشغيل السيرفر السحابي، يرجى الانتظار... (محاولة ${attemptCount})`;
-      statusMsg.style.color = '#ff9800';
 
       try {
-        const res = await fetch(API_URL);
+        const res = await fetch(`${API_BASE}/api/home`);
         const contentType = res.headers.get('content-type');
         
-        // التأكد أن الاستجابة JSON وليست صفحة HTML الخاصة بشركة Render
         if (res.ok && contentType && contentType.includes('application/json')) {
           const result = await res.json();
           if (result.success && result.data && result.data.length > 0) {
             itemsData = result.data;
             filteredData = [...itemsData];
-            statusMsg.style.display = 'none'; // إخفاء الرسالة عند النجاح
+            statusMsg.style.display = 'none';
             renderList(filteredData);
             return;
           }
         }
-        
-        // إذا كان السيرفر ما زال يستيقظ، نعيد المحاولة بعد 4 ثوانٍ
         setTimeout(loadAnime, 4000);
       } catch (err) {
-        // إعادة المحاولة التلقائية عند وجود أي تأخير شبكة
         setTimeout(loadAnime, 4000);
       }
     }
@@ -131,7 +148,7 @@
       container.innerHTML = '';
       
       if (list.length === 0) {
-        document.getElementById('status-msg').innerText = 'لم يتم العثور على أنميات.';
+        document.getElementById('status-msg').innerText = 'لم يتم العثور على أنميات مطابقة.';
         document.getElementById('status-msg').style.display = 'block';
         return;
       }
@@ -150,36 +167,48 @@
       currentIndex = 0;
     }
 
+    // جلب رابط التشغيل ومشاهدة الفيديو بملء الشاشة
     async function playAnime(watchUrl) {
       const modal = document.getElementById('player-modal');
+      const loader = document.getElementById('player-loading');
       const iframe = document.getElementById('video-frame');
+
+      modal.style.display = 'block';
+      loader.innerText = 'جاري جلب سيرفر المشاهدة...';
+      loader.style.display = 'block';
+      iframe.style.display = 'none';
+      iframe.src = '';
+
       try {
-        const res = await fetch(`https://animez-uxsm.onrender.com/api/watch?url=${encodeURIComponent(watchUrl)}`);
-        const data = await res.json();
+        const response = await fetch(`${API_BASE}/api/watch?url=${encodeURIComponent(watchUrl)}`);
+        const data = await response.json();
+
         if (data.success && data.embedUrl) {
+          loader.style.display = 'none';
           iframe.src = data.embedUrl;
-          modal.style.display = 'block';
+          iframe.style.display = 'block';
         } else {
-          alert(data.message || 'تعذر جلب سيرفر المشاهدة');
+          loader.innerText = 'عذراً، هذا السيرفر غير متوفر حالياً. اضغط زر الرجوع.';
         }
       } catch (err) {
-        alert('خطأ في الاتصال بالسيرفر');
+        loader.innerText = 'حدث خطأ في الاتصال، اضغط زر الرجوع.';
       }
     }
 
-    // البحث
+    // تصفية الأنميات عند الكتابة في خانة البحث
     document.getElementById('search-input').addEventListener('input', (e) => {
       const query = e.target.value.toLowerCase().trim();
       filteredData = itemsData.filter(item => item.title.toLowerCase().includes(query));
       renderList(filteredData);
     });
 
-    // التحكم بالريموت
+    // تحكم الريموت الكامل (الأسهم، موافق، والرجوع)
     document.addEventListener('keydown', (e) => {
       const modal = document.getElementById('player-modal');
       const iframe = document.getElementById('video-frame');
       const cards = document.querySelectorAll('.card');
 
+      // إغلاق مشغل الفيديو بزر العودة (Back / ESC)
       if (modal.style.display === 'block') {
         if (e.key === 'Escape' || e.keyCode === 10009 || e.keyCode === 8 || e.keyCode === 27) {
           modal.style.display = 'none';
@@ -210,6 +239,7 @@
       cards[currentIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
+    // بدء تشغيل الجلب التلقائي عند فتح التطبيق
     loadAnime();
   </script>
 </body>
