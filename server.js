@@ -16,16 +16,17 @@ app.use(express.json());
 
 const TARGET_URL = 'https://animezid.com';
 
+// نقطة لفحص حالة السيرفر وتجنب خمول Render
 app.get('/', (req, res) => {
-  res.send('AnimeZ API is running!');
+  res.json({ success: true, message: 'AnimeZ API is running perfectly!' });
 });
 
-// جلب قائمة الأنميات
+// جلب قائمة الأنميات والصفحة الرئيسية
 app.get('/api/home', async (req, res) => {
   try {
     const response = await axios.get(TARGET_URL, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       },
       timeout: 10000
     });
@@ -37,7 +38,7 @@ app.get('/api/home', async (req, res) => {
       const img = $(element).find('img');
       const imgSrc = img.attr('src') || img.attr('data-src') || '';
       
-      if (imgSrc && (imgSrc.includes('thumb') || imgSrc.includes('upload'))) {
+      if (imgSrc && (imgSrc.includes('thumb') || imgSrc.includes('upload') || imgSrc.includes('image'))) {
         const title = $(element).attr('title') || img.attr('alt') || $(element).text().trim();
         const link = $(element).attr('href') || '';
 
@@ -58,88 +59,46 @@ app.get('/api/home', async (req, res) => {
   }
 });
 
-// جلب رابط سيرفر الفيديو المباشر من play.php
+// جلب رابط التشغيل المباشر واستخراج السيرفرات (مثل صفحة play.php)
 app.get('/api/watch', async (req, res) => {
-  try {
-    let targetUrl = req.query.url;
-    if (!targetUrl) return res.status(400).json({ success: false, message: 'URL is required' });
+  let targetUrl = req.query.url;
+  if (!targetUrl) return res.status(400).json({ success: false, message: 'رابط غير صالح' });
 
-    // التحويل التلقائي لصفحة التشغيل التي تحتوي على السيرفرات
+  try {
+    // التحويل التلقائي لصفحة المشاهدة والتحكم
     let playUrl = targetUrl.replace('watch.php', 'play.php');
 
-    const { data } = await axios.get(playUrl, {
+    const response = await axios.get(playUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
     });
+    
+    const $ = cheerio.load(response.data);
+    let embedUrl = '';
 
-    const $ = cheerio.load(data);
-    let embedUrl = $('iframe').attr('src') || $('iframe').attr('data-src') || '';
+    // البحث عن الـ iframe الأساسي للمشاهدة
+    const iframeSrc = $('iframe').attr('src') || $('iframe').attr('data-src');
+    if (iframeSrc) {
+      embedUrl = iframeSrc.startsWith('//') ? `https:${iframeSrc}` : (!iframeSrc.startsWith('http') ? `${TARGET_URL}${iframeSrc}` : iframeSrc);
+    }
+
+    // إذا لم يوجد iframe، نبحث عن أزرار أو روابط السيرفرات الداخلية
+    if (!embedUrl) {
+      let altLink = $('video source').attr('src') || $('.server-item').attr('data-url');
+      if (altLink) {
+        embedUrl = altLink.startsWith('//') ? `https:${altLink}` : altLink;
+      }
+    }
 
     if (embedUrl) {
-      if (embedUrl.startsWith('//')) {
-        embedUrl = `https:${embedUrl}`;
-      } else if (!embedUrl.startsWith('http')) {
-        embedUrl = `https://animezid.com${embedUrl}`;
-      }
       return res.json({ success: true, embedUrl });
+    } else {
+      return res.json({ success: false, message: 'لم يتم العثور على سيرفر مشاهدة شغال' });
     }
 
-    res.json({ success: false, message: 'لم يتم العثور على سيرفر تشغيل داخل الصفحة' });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});      const img = $(element).find('img');
-      const imgSrc = img.attr('src') || img.attr('data-src') || '';
-      
-      if (imgSrc && (imgSrc.includes('thumb') || imgSrc.includes('upload'))) {
-        const title = $(element).attr('title') || img.attr('alt') || $(element).text().trim();
-        const link = $(element).attr('href') || '';
-
-        if (title && title.length > 2) {
-          items.push({
-            id: index + 1,
-            title: title.replace(/\s+/g, ' ').trim(),
-            image: imgSrc.startsWith('http') ? imgSrc : `${TARGET_URL}${imgSrc}`,
-            link: link.startsWith('http') ? link : `${TARGET_URL}${link}`
-          });
-        }
-      }
-    });
-
-    res.json({ success: true, count: items.length, data: items });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// مسار جلب رابط مشغل الفيديو عند النقر على أنمي
-app.get('/api/watch', async (req, res) => {
-  try {
-    const targetUrl = req.query.url;
-    if (!targetUrl) return res.status(400).json({ success: false, message: 'URL is required' });
-
-    const { data } = await axios.get(targetUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
-
-    const $ = cheerio.load(data);
-    let embedUrl = $('iframe').attr('src') || $('iframe').attr('data-src') || '';
-    
-    if (embedUrl && !embedUrl.startsWith('http')) {
-      embedUrl = `https:${embedUrl}`;
-    }
-
-    res.json({ success: true, embedUrl });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'خطأ في جلب بيانات صفحة التشغيل' });
   }
 });
 
