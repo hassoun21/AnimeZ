@@ -73,7 +73,6 @@
       text-overflow: ellipsis;
     }
 
-    /* نافذة اختيار السيرفرات والمشغل */
     #modal {
       display: none;
       position: fixed;
@@ -103,7 +102,6 @@
       border: 3px solid #333;
       font-size: 18px;
       text-align: center;
-      cursor: pointer;
     }
     .server-btn.focused {
       border-color: #ff9800;
@@ -140,8 +138,7 @@
     let currentIndex = 0;
     let attemptCount = 0;
     
-    // حالات التنقل: 'grid' للأساسي، 'servers' لاختيار السيرفر، 'player' للمشغل
-    let appState = 'grid'; 
+    let appState = 'grid'; // 'grid', 'servers', 'player'
     let currentServerIndex = 0;
     let currentPlayUrl = '';
 
@@ -194,7 +191,6 @@
       currentIndex = 0;
     }
 
-    // جلب السيرفرات عند الضغط على الحلقة
     async function fetchServers(watchUrl) {
       appState = 'servers';
       const modal = document.getElementById('modal');
@@ -239,7 +235,6 @@
       currentServerIndex = 0;
     }
 
-    // تشغيل السيرفر المختار
     async function playSelectedServer() {
       const modal = document.getElementById('modal');
       const loader = document.getElementById('modal-loading');
@@ -271,16 +266,34 @@
       }
     }
 
+    // تفعيل البحث فقط عند الكتابة العادية من لوحة المفاتيح
     document.getElementById('search-input').addEventListener('input', (e) => {
       const query = e.target.value.toLowerCase().trim();
       filteredData = itemsData.filter(item => item.title.toLowerCase().includes(query));
       renderList(filteredData);
     });
 
-    // التحكم بالريموت حسب الحالة (الرئيسية، قائمة السيرفرات، أو داخل المشغل)
+    // التحكم الأساسي بالريموت كنترول مع منع القفز إلى حقل البحث
     document.addEventListener('keydown', (e) => {
       const modal = document.getElementById('modal');
       const iframe = document.getElementById('video-frame');
+      const searchInput = document.getElementById('search-input');
+
+      // إذا كان التركيز في خانة البحث وتم الضغط على سهم للأسفل، ننقل التركيز إلى الكروت
+      if (document.activeElement === searchInput) {
+        if (e.key === 'ArrowDown') {
+          searchInput.blur(); // إزالة التركيز عن خانة البحث
+          if (appState === 'grid') {
+            const cards = document.querySelectorAll('.card');
+            if (cards.length > 0) {
+              cards[currentIndex].classList.add('focused');
+              cards[currentIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }
+          e.preventDefault();
+        }
+        return; // السماح بالكتابة الطبيعية داخل خانة البحث
+      }
 
       // 1. إذا كنا داخل مشغل الفيديو
       if (appState === 'player') {
@@ -311,13 +324,15 @@
           if (currentServerIndex < serverBtns.length - 1) currentServerIndex++;
         } else if (e.key === 'ArrowUp') {
           if (currentServerIndex > 0) currentServerIndex--;
-        } else if (e.key === 'Enter') {
+        } else if (e.key === 'Enter' || e.keyCode === 13) {
           playSelectedServer();
+          e.preventDefault();
           return;
         }
 
         serverBtns[currentServerIndex].classList.add('focused');
         serverBtns[currentServerIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        e.preventDefault();
         return;
       }
 
@@ -332,16 +347,31 @@
       } else if (e.key === 'ArrowLeft') {
         if (currentIndex < cards.length - 1) currentIndex++;
       } else if (e.key === 'ArrowDown') {
-        if (currentIndex + 4 < cards.length) currentIndex += 4;
+        if (currentIndex + 4 < cards.length) {
+          currentIndex += 4;
+        }
       } else if (e.key === 'ArrowUp') {
-        if (currentIndex - 4 >= 0) currentIndex -= 4;
-      } else if (e.key === 'Enter') {
+        if (currentIndex - 4 >= 0) {
+          currentIndex -= 4;
+        } else {
+          // إذا كان في السطر الأول وضغط سهم لأعلى، ننتقل إلى خانة البحث
+          searchInput.focus();
+          cards[currentIndex].classList.remove('focused');
+          e.preventDefault();
+          return;
+        }
+      } else if (e.key === 'Enter' || e.keyCode === 13) {
         const watchUrl = cards[currentIndex].dataset.link;
-        if (watchUrl) fetchServers(watchUrl);
+        if (watchUrl) {
+          fetchServers(watchUrl);
+        }
+        e.preventDefault();
+        return;
       }
 
       cards[currentIndex].classList.add('focused');
       cards[currentIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      e.preventDefault();
     });
 
     loadAnime();
