@@ -16,55 +16,49 @@ app.use(express.json());
 
 const TARGET_URL = 'https://animezid.com';
 
+app.get('/', (req, res) => {
+  res.send('AnimeZ API is running!');
+});
+
+// مسار جلب قائمة الأنميات
 app.get('/api/home', async (req, res) => {
   try {
-    const { data } = await axios.get(TARGET_URL, {
+    const response = await axios.get(TARGET_URL, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      },
+      timeout: 10000
     });
-    const $ = cheerio.load(data);
+    
+    const $ = cheerio.load(response.data);
     const items = [];
 
-    // استخراج عناصر الأنمي ذكياً من صور المصغرات
-    $('img').each((index, element) => {
-      const imgUrl = $(element).attr('src') || $(element).attr('data-src') || '';
+    $('.story-item, .anime-card, .poster-card, a:has(img)').each((index, element) => {
+      const img = $(element).find('img');
+      const imgSrc = img.attr('src') || img.attr('data-src') || '';
       
-      if (imgUrl.includes('/uploads/') || imgUrl.includes('thumb')) {
-        const parentA = $(element).closest('a');
-        const parentDiv = $(element).closest('div');
-        
-        const link = parentA.attr('href') || '';
-        let title = parentA.attr('title') || $(element).attr('alt') || parentDiv.find('.title, h2, h3, span').text().trim();
-        
-        title = title.replace(/\s+/g, ' ').trim();
-        const fullImage = imgUrl.startsWith('http') ? imgUrl : `${TARGET_URL}${imgUrl}`;
-        const fullLink = link.startsWith('http') ? link : `${TARGET_URL}${link}`;
+      if (imgSrc && (imgSrc.includes('thumb') || imgSrc.includes('upload'))) {
+        const title = $(element).attr('title') || img.attr('alt') || $(element).text().trim();
+        const link = $(element).attr('href') || '';
 
         if (title && title.length > 2) {
           items.push({
-            id: items.length + 1,
-            title: title,
-            image: fullImage,
-            link: fullLink
+            id: index + 1,
+            title: title.replace(/\s+/g, ' ').trim(),
+            image: imgSrc.startsWith('http') ? imgSrc : `${TARGET_URL}${imgSrc}`,
+            link: link.startsWith('http') ? link : `${TARGET_URL}${link}`
           });
         }
       }
     });
 
-    // إزالة التكرار إن وجد
-    const uniqueItems = items.filter((item, index, self) =>
-      index === self.findIndex((t) => t.title === item.title)
-    );
-
-    res.json({ success: true, count: uniqueItems.length, data: uniqueItems });
+    res.json({ success: true, count: items.length, data: items });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-// مسار جلب رابط المشاهدة للأنمي
+// مسار جلب رابط مشغل الفيديو عند النقر على أنمي
 app.get('/api/watch', async (req, res) => {
   try {
     const targetUrl = req.query.url;
@@ -72,13 +66,11 @@ app.get('/api/watch', async (req, res) => {
 
     const { data } = await axios.get(targetUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
     });
 
     const $ = cheerio.load(data);
-    
-    // البحث عن إطار الفيديو (iframe) أو مصدر الفيديو المباشر
     let embedUrl = $('iframe').attr('src') || $('iframe').attr('data-src') || '';
     
     if (embedUrl && !embedUrl.startsWith('http')) {
@@ -90,6 +82,8 @@ app.get('/api/watch', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
