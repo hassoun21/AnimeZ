@@ -64,6 +64,32 @@ app.get('/api/home', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+// مسار جلب رابط المشاهدة للأنمي
+app.get('/api/watch', async (req, res) => {
+  try {
+    const targetUrl = req.query.url;
+    if (!targetUrl) return res.status(400).json({ success: false, message: 'URL is required' });
+
+    const { data } = await axios.get(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+
+    const $ = cheerio.load(data);
+    
+    // البحث عن إطار الفيديو (iframe) أو مصدر الفيديو المباشر
+    let embedUrl = $('iframe').attr('src') || $('iframe').attr('data-src') || '';
+    
+    if (embedUrl && !embedUrl.startsWith('http')) {
+      embedUrl = `https:${embedUrl}`;
+    }
+
+    res.json({ success: true, embedUrl });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
