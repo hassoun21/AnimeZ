@@ -5,86 +5,42 @@ const cheerio = require('cheerio');
 
 const app = express();
 
-// إعطاء صلاحيات الاتصال للواجهة
 app.use(cors());
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
   next();
 });
 
 app.use(express.json());
-app.use(express.static('public'));
 
-const PORT = 3000;
-
-const PORT = 3000;
-const TARGET_URL = 'https://animezid.cam';
+const TARGET_URL = 'https://animezid.com';
 
 app.get('/api/home', async (req, res) => {
-  console.log('🔍 جاري طلب الصفحة من Animezid...');
-  
   try {
     const { data } = await axios.get(TARGET_URL, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
     });
-
     const $ = cheerio.load(data);
     const items = [];
-
-    $('img').each((index, element) => {
-      const src = $(element).attr('src');
-      const alt = $(element).attr('alt');
-      if (src && alt && src.includes('uploads')) {
-        items.push({
-          id: items.length + 1,
-          title: alt,
-          image: src
-        });
+    // جلب البيانات من الموقع
+    $('.stories-container .story-item, .anime-card').each((index, element) => {
+      const title = $(element).find('.title, h3').text().trim();
+      const image = $(element).find('img').attr('src');
+      const link = $(element).find('a').attr('href');
+      if (title && link) {
+        items.push({ id: index + 1, title, image, link });
       }
     });
-
-    console.log(`✅ تم العثور على ${items.length} عنصر بصورة وعنوان.`);
     res.json({ success: true, count: items.length, data: items });
-
   } catch (error) {
-    console.error('❌ حدث خطأ:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
-// مسار لجلب تفاصيل وحلقات الأنمي
-app.get('/api/anime-episodes', async (req, res) => {
-  const animeUrl = req.query.url;
-  if (!animeUrl) {
-    return res.status(400).json({ success: false, error: 'الرابط مطلوب' });
-  }
 
-  try {
-    const { data } = await axios.get(animeUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
-
-    const $ = cheerio.load(data);
-    const episodes = [];
-
-    // استخراج الحلقات بناءً على الفئات الشائعة في مواقع الأنمي
-    $('.episodes-list a, .les-eps a, ul.episodes li a, .ep-item a').each((index, element) => {
-      const title = $(element).text().trim();
-      const link = $(element).attr('href');
-      if (link) {
-        episodes.push({ title, link });
-      }
-    });
-
-    res.json({ success: true, count: episodes.length, episodes });
-  } catch (error) {
-    console.error('❌ خطأ في جلب الحلقات:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 السيرفر يعمل على: http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
