@@ -73,7 +73,6 @@
       text-overflow: ellipsis;
     }
 
-    /* نافذة مشغل الفيديو بملء الشاشة */
     #player-modal {
       display: none;
       position: fixed;
@@ -106,7 +105,7 @@
   <div id="anime-list" class="grid"></div>
 
   <div id="player-modal">
-    <div id="player-loading">جاري جلب سيرفر المشاهدة...</div>
+    <div id="player-loading">جاري فتح صفحة المشاهدة...</div>
     <iframe id="video-frame" src="" style="width:100%; height:100%; border:none; display:none;" allowfullscreen></iframe>
   </div>
 
@@ -117,7 +116,6 @@
     let currentIndex = 0;
     let attemptCount = 0;
 
-    // دالة جلب الأنميات مع إعادة المحاولة التلقائية أثناء نوم السيرفر
     async function loadAnime() {
       const statusMsg = document.getElementById('status-msg');
       attemptCount++;
@@ -167,14 +165,13 @@
       currentIndex = 0;
     }
 
-    // جلب رابط التشغيل ومشاهدة الفيديو بملء الشاشة
     async function playAnime(watchUrl) {
       const modal = document.getElementById('player-modal');
       const loader = document.getElementById('player-loading');
       const iframe = document.getElementById('video-frame');
 
       modal.style.display = 'block';
-      loader.innerText = 'جاري جلب سيرفر المشاهدة...';
+      loader.innerText = 'جاري تحميل المشغل...';
       loader.style.display = 'block';
       iframe.style.display = 'none';
       iframe.src = '';
@@ -188,27 +185,29 @@
           iframe.src = data.embedUrl;
           iframe.style.display = 'block';
         } else {
-          loader.innerText = 'عذراً، هذا السيرفر غير متوفر حالياً. اضغط زر الرجوع.';
+          // في حال فشل الـ API، نستخدم رابط الصفحة مباشرة كبديل نهائي
+          loader.style.display = 'none';
+          iframe.src = watchUrl.replace('watch.php', 'play.php');
+          iframe.style.display = 'block';
         }
       } catch (err) {
-        loader.innerText = 'حدث خطأ في الاتصال، اضغط زر الرجوع.';
+        loader.style.display = 'none';
+        iframe.src = watchUrl.replace('watch.php', 'play.php');
+        iframe.style.display = 'block';
       }
     }
 
-    // تصفية الأنميات عند الكتابة في خانة البحث
     document.getElementById('search-input').addEventListener('input', (e) => {
       const query = e.target.value.toLowerCase().trim();
       filteredData = itemsData.filter(item => item.title.toLowerCase().includes(query));
       renderList(filteredData);
     });
 
-    // تحكم الريموت الكامل (الأسهم، موافق، والرجوع)
     document.addEventListener('keydown', (e) => {
       const modal = document.getElementById('player-modal');
       const iframe = document.getElementById('video-frame');
       const cards = document.querySelectorAll('.card');
 
-      // إغلاق مشغل الفيديو بزر العودة (Back / ESC)
       if (modal.style.display === 'block') {
         if (e.key === 'Escape' || e.keyCode === 10009 || e.keyCode === 8 || e.keyCode === 27) {
           modal.style.display = 'none';
@@ -239,7 +238,6 @@
       cards[currentIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
-    // بدء تشغيل الجلب التلقائي عند فتح التطبيق
     loadAnime();
   </script>
 </body>
