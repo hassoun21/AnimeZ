@@ -16,12 +16,10 @@ app.use(express.json());
 
 const TARGET_URL = 'https://animezid.com';
 
-// نقطة لفحص حالة السيرفر وتجنب خمول Render
 app.get('/', (req, res) => {
   res.json({ success: true, message: 'AnimeZ API is running perfectly!' });
 });
 
-// جلب قائمة الأنميات والصفحة الرئيسية
 app.get('/api/home', async (req, res) => {
   try {
     const response = await axios.get(TARGET_URL, {
@@ -59,13 +57,13 @@ app.get('/api/home', async (req, res) => {
   }
 });
 
-// جلب رابط التشغيل المباشر واستخراج السيرفرات (مثل صفحة play.php)
+// المسار المعدل لجلب رابط المشاهدة بدقة عالية
 app.get('/api/watch', async (req, res) => {
   let targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).json({ success: false, message: 'رابط غير صالح' });
 
   try {
-    // التحويل التلقائي لصفحة المشاهدة والتحكم
+    // التأكد من تحويل الرابط إلى صفحة التشغيل play.php
     let playUrl = targetUrl.replace('watch.php', 'play.php');
 
     const response = await axios.get(playUrl, {
@@ -77,28 +75,38 @@ app.get('/api/watch', async (req, res) => {
     const $ = cheerio.load(response.data);
     let embedUrl = '';
 
-    // البحث عن الـ iframe الأساسي للمشاهدة
-    const iframeSrc = $('iframe').attr('src') || $('iframe').attr('data-src');
-    if (iframeSrc) {
-      embedUrl = iframeSrc.startsWith('//') ? `https:${iframeSrc}` : (!iframeSrc.startsWith('http') ? `${TARGET_URL}${iframeSrc}` : iframeSrc);
-    }
-
-    // إذا لم يوجد iframe، نبحث عن أزرار أو روابط السيرفرات الداخلية
-    if (!embedUrl) {
-      let altLink = $('video source').attr('src') || $('.server-item').attr('data-url');
-      if (altLink) {
-        embedUrl = altLink.startsWith('//') ? `https:${altLink}` : altLink;
+    // البحث عن أول iframe متاح في الصفحة
+    $('iframe').each((i, el) => {
+      let src = $(el).attr('src') || $(el).attr('data-src');
+      if (src && !src.includes('ads') && !src.includes('analytics')) {
+        embedUrl = src;
+        return false; // الخروج من الحلقة عند العثور على أول رابط حقيقي
       }
+    });
+
+    // إذا لم يتم العثور على iframe، نبحث في روابط التشغيل البديلة
+    if (!embedUrl) {
+      const altSource = $('video source').attr('src') || $('.server-item').attr('data-url');
+      if (altSource) embedUrl = altSource;
     }
 
-    if (embedUrl) {
-      return res.json({ success: true, embedUrl });
-    } else {
-      return res.json({ success: false, message: 'لم يتم العثور على سيرفر مشاهدة شغال' });
+    // القاعدة الذهبية: إذا استعصى استخراج الرابط، نمرر رابط صفحة التشغيل نفسها لعرضها مباشرة كحاسوب
+    if (!embedUrl) {
+      embedUrl = playUrl;
     }
+
+    if (embedUrl.startsWith('//')) {
+      embedUrl = 'https:' + embedUrl;
+    } else if (!embedUrl.startsWith('http')) {
+      embedUrl = `${TARGET_URL}${embedUrl}`;
+    }
+
+    return res.json({ success: true, embedUrl });
 
   } catch (err) {
-    return res.status(500).json({ success: false, message: 'خطأ في جلب بيانات صفحة التشغيل' });
+    // في حال الخطأ، نعيد رابط الصفحة الأصلية مباشرة لضمان عدم ظهور رسالة الخطأ للمستخدم
+    let fallbackUrl = req.query.url.replace('watch.php', 'play.php');
+    return res.json({ success: true, embedUrl: fallbackUrl });
   }
 });
 
