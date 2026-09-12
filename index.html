@@ -1,89 +1,158 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <title>تطبيق الأنمي - AnimeZid</title>
-    <style>
-        body { font-family: Tahoma, sans-serif; background: #121212; color: #fff; padding: 20px; margin: 0; }
-        h1 { text-align: center; color: #ff9800; margin-bottom: 20px; }
-        
-        .search-container { text-align: center; margin-bottom: 30px; }
-        .search-container input {
-            width: 50%;
-            padding: 12px 20px;
-            font-size: 16px;
-            border-radius: 25px;
-            border: none;
-            outline: none;
-            background: #1e1e1e;
-            color: #fff;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
-        .card { background: #1e1e1e; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 8px rgba(0,0,0,0.3); text-align: center; padding-bottom: 10px; transition: transform 0.2s; }
-        .card:hover { transform: translateY(-5px); }
-        .card img { width: 100%; height: 280px; object-fit: cover; }
-        .card h3 { font-size: 14px; padding: 10px; margin: 0; height: 40px; overflow: hidden; }
-        .card a { display: block; margin-top: 10px; color: #4CAF50; text-decoration: none; font-weight: bold; }
-        .card a:hover { text-decoration: underline; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnimeZ TV</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #ffffff;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      color: #ff9800;
+      margin-bottom: 20px;
+    }
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      justify-content: center;
+    }
+    .card {
+      width: 160px;
+      background: #1e1e1e;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 3px solid transparent;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .card.focused {
+      border-color: #ff9800;
+      transform: scale(1.08);
+      box-shadow: 0 0 15px rgba(255, 152, 0, 0.6);
+    }
+    .card img {
+      width: 100%;
+      height: 220px;
+      object-fit: cover;
+    }
+    .card p {
+      padding: 8px;
+      margin: 0;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  </style>
 </head>
 <body>
 
-    <h1>قائمة الأنميات المضافة حديثاً</h1>
+  <h1>مكتبة الأنمي - TV Edition</h1>
+  <div id="anime-list" class="grid"></div>
 
-    <div class="search-container">
-        <input type="text" id="search-input" placeholder="ابحث عن أي أنمي بالاسم..." onkeyup="filterAnime()">
-    </div>
+  <!-- عنصر مشغل الفيديو المنبثق -->
+  <div id="player-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:9999;">
+    <iframe id="video-frame" src="" style="width:100%; height:100%; border:none;" allowfullscreen></iframe>
+  </div>
 
-    <div class="grid" id="anime-container">جاري تحميل الأنميات...</div>
+  <script>
+    const API_URL = 'https://animez-uxsm.onrender.com/api/home';
+    let itemsData = [];
+    let currentIndex = 0;
 
-    <script>
-        let allAnimeData = [];
-
-        fetch('https://animez-uxsm.onrender.com/api/home')
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.success && data.data.length > 0) {
-                    allAnimeData = data.data;
-                    displayAnime(allAnimeData);
-                } else {
-                    document.getElementById('anime-container').innerHTML = '<p style="grid-column: 1/-1; text-align: center;">لم يتم العثور على أنميات.</p>';
-                }
-            })
-            .catch(err => {
-                document.getElementById('anime-container').innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: red;">حدث خطأ أثناء جلب البيانات من السيرفر.</p>';
-            });
-
-        function displayAnime(animeList) {
-            const container = document.getElementById('anime-container');
-            container.innerHTML = '';
-            
-            if (animeList.length === 0) {
-                container.innerHTML = '<p style="grid-column: 1/-1; text-align: center;">لا توجد نتائج مطابقة لبحثك.</p>';
-                return;
-            }
-
-            animeList.forEach(anime => {
-                const animeLink = anime.link && anime.link.startsWith('http') ? anime.link : 'https://animezid.cam';
-                
-                container.innerHTML += `
-                    <div class="card">
-                        <img src="${anime.image}" alt="${anime.title}">
-                        <h3>${anime.title}</h3>
-                        <a href="${animeLink}" target="_blank" class="watch-btn">بدء المشاهدة</a>
-                    </div>
-                `;
-            });
+    // 1. جلب الأنميات من السيرفر
+    async function loadAnime() {
+      try {
+        const res = await fetch(API_URL);
+        const result = await res.json();
+        if (result.success && result.data) {
+          itemsData = result.data;
+          renderList(itemsData);
         }
+      } catch (err) {
+        console.error('خطأ في جلب البيانات:', err);
+      }
+    }
 
-        function filterAnime() {
-            const query = document.getElementById('search-input').value.toLowerCase();
-            const filtered = allAnimeData.filter(anime => anime.title.toLowerCase().includes(query));
-            displayAnime(filtered);
+    function renderList(list) {
+      const container = document.getElementById('anime-list');
+      container.innerHTML = '';
+      list.forEach((item, index) => {
+        const card = document.createElement('div');
+        card.className = `card ${index === 0 ? 'focused' : ''}`;
+        card.dataset.index = index;
+        card.dataset.link = item.link;
+        card.innerHTML = `
+          <img src="${item.image}" alt="${item.title}">
+          <p>${item.title}</p>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // 2. دالة تشغيل الفيديو
+    async function playAnime(watchUrl) {
+      const modal = document.getElementById('player-modal');
+      const iframe = document.getElementById('video-frame');
+      try {
+        const res = await fetch(`https://animez-uxsm.onrender.com/api/watch?url=${encodeURIComponent(watchUrl)}`);
+        const data = await res.json();
+        if (data.success && data.embedUrl) {
+          iframe.src = data.embedUrl;
+          modal.style.display = 'block';
+        } else {
+          alert('تعذر جلب سيرفر المشاهدة');
         }
-    </script>
+      } catch (err) {
+        alert('خطأ في الاتصال بالسيرفر');
+      }
+    }
 
+    // 3. دعم أزرار الريموت (الأسهم + Enter + Back)
+    document.addEventListener('keydown', (e) => {
+      const modal = document.getElementById('player-modal');
+      const iframe = document.getElementById('video-frame');
+      const cards = document.querySelectorAll('.card');
+
+      // إغلاق مشغل الفيديو عند ضغط زر الرجوع في الريموت
+      if (modal.style.display === 'block') {
+        if (e.key === 'Escape' || e.keyCode === 10009 || e.keyCode === 8 || e.keyCode === 27) {
+          modal.style.display = 'none';
+          iframe.src = '';
+          e.preventDefault();
+        }
+        return;
+      }
+
+      if (cards.length === 0) return;
+
+      cards[currentIndex].classList.remove('focused');
+
+      // التنقل بالأسهم
+      if (e.key === 'ArrowRight') {
+        if (currentIndex > 0) currentIndex--;
+      } else if (e.key === 'ArrowLeft') {
+        if (currentIndex < cards.length - 1) currentIndex++;
+      } else if (e.key === 'ArrowDown') {
+        if (currentIndex + 4 < cards.length) currentIndex += 4;
+      } else if (e.key === 'ArrowUp') {
+        if (currentIndex - 4 >= 0) currentIndex -= 4;
+      } else if (e.key === 'Enter') {
+        const watchUrl = cards[currentIndex].dataset.link;
+        if (watchUrl) playAnime(watchUrl);
+      }
+
+      cards[currentIndex].classList.add('focused');
+      cards[currentIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    loadAnime();
+  </script>
 </body>
 </html>
