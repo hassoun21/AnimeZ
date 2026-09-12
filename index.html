@@ -17,10 +17,28 @@
       color: #ff9800;
       margin-bottom: 20px;
     }
+    .search-box {
+      margin: 10px auto 25px auto;
+    }
+    .search-box input {
+      width: 60%;
+      max-width: 500px;
+      padding: 12px 20px;
+      border-radius: 25px;
+      border: 2px solid #333;
+      background: #1e1e1e;
+      color: #fff;
+      font-size: 16px;
+      text-align: center;
+      outline: none;
+    }
+    .search-box input:focus {
+      border-color: #ff9800;
+    }
     #status-msg {
       font-size: 18px;
       color: #ff9800;
-      margin-top: 50px;
+      margin-top: 30px;
     }
     .grid {
       display: flex;
@@ -59,10 +77,14 @@
 <body>
 
   <h1>مكتبة الأنمي - TV Edition</h1>
+
+  <div class="search-box">
+    <input type="text" id="search-input" placeholder="ابحث عن أنمي...">
+  </div>
+
   <div id="status-msg">جاري الاتصال بالسيرفر، يرجى الانتظار...</div>
   <div id="anime-list" class="grid"></div>
 
-  <!-- مشغل الفيديو -->
   <div id="player-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:9999;">
     <iframe id="video-frame" src="" style="width:100%; height:100%; border:none;" allowfullscreen></iframe>
   </div>
@@ -70,36 +92,50 @@
   <script>
     const API_URL = 'https://animez-uxsm.onrender.com/api/home';
     let itemsData = [];
+    let filteredData = [];
     let currentIndex = 0;
+    let attemptCount = 0;
 
-    // دالة جلب البيانات مع إعادة المحاولة التلقائية أثناء استيقاظ Render
-    async function loadAnime(retries = 5) {
+    async function loadAnime() {
       const statusMsg = document.getElementById('status-msg');
+      attemptCount++;
+      statusMsg.innerText = `جاري تشغيل السيرفر السحابي، يرجى الانتظار... (محاولة ${attemptCount})`;
+      statusMsg.style.color = '#ff9800';
+
       try {
         const res = await fetch(API_URL);
-        const result = await res.json();
+        const contentType = res.headers.get('content-type');
         
-        if (result.success && result.data && result.data.length > 0) {
-          itemsData = result.data;
-          statusMsg.style.display = 'none'; // إخفاء نص التحميل عند النجاح
-          renderList(itemsData);
-        } else {
-          throw new Error('بيانات فارغة');
+        // التأكد أن الاستجابة JSON وليست صفحة HTML الخاصة بشركة Render
+        if (res.ok && contentType && contentType.includes('application/json')) {
+          const result = await res.json();
+          if (result.success && result.data && result.data.length > 0) {
+            itemsData = result.data;
+            filteredData = [...itemsData];
+            statusMsg.style.display = 'none'; // إخفاء الرسالة عند النجاح
+            renderList(filteredData);
+            return;
+          }
         }
+        
+        // إذا كان السيرفر ما زال يستيقظ، نعيد المحاولة بعد 4 ثوانٍ
+        setTimeout(loadAnime, 4000);
       } catch (err) {
-        if (retries > 0) {
-          statusMsg.innerText = `جاري تشغيل السيرفر السحابي... محاولة (${6 - retries}/5)`;
-          setTimeout(() => loadAnime(retries - 1), 4000); // إعادة المحاولة كل 4 ثوانٍ
-        } else {
-          statusMsg.innerText = 'فشل الاتصال بالسيرفر. يرجى إغلاق التطبيق وإعادة فتحه.';
-          statusMsg.style.color = '#ff5252';
-        }
+        // إعادة المحاولة التلقائية عند وجود أي تأخير شبكة
+        setTimeout(loadAnime, 4000);
       }
     }
 
     function renderList(list) {
       const container = document.getElementById('anime-list');
       container.innerHTML = '';
+      
+      if (list.length === 0) {
+        document.getElementById('status-msg').innerText = 'لم يتم العثور على أنميات.';
+        document.getElementById('status-msg').style.display = 'block';
+        return;
+      }
+
       list.forEach((item, index) => {
         const card = document.createElement('div');
         card.className = `card ${index === 0 ? 'focused' : ''}`;
@@ -111,6 +147,7 @@
         `;
         container.appendChild(card);
       });
+      currentIndex = 0;
     }
 
     async function playAnime(watchUrl) {
@@ -123,13 +160,21 @@
           iframe.src = data.embedUrl;
           modal.style.display = 'block';
         } else {
-          alert('تعذر جلب سيرفر المشاهدة');
+          alert(data.message || 'تعذر جلب سيرفر المشاهدة');
         }
       } catch (err) {
         alert('خطأ في الاتصال بالسيرفر');
       }
     }
 
+    // البحث
+    document.getElementById('search-input').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      filteredData = itemsData.filter(item => item.title.toLowerCase().includes(query));
+      renderList(filteredData);
+    });
+
+    // التحكم بالريموت
     document.addEventListener('keydown', (e) => {
       const modal = document.getElementById('player-modal');
       const iframe = document.getElementById('video-frame');
