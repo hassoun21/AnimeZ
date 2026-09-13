@@ -80,7 +80,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0,0,0,0.9);
+      background: rgba(0,0,0,0.95);
       z-index: 9999;
       justify-content: center;
       align-items: center;
@@ -112,6 +112,12 @@
       color: #ff9800;
       font-size: 20px;
     }
+    video, iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -128,7 +134,9 @@
   <div id="modal">
     <div id="modal-loading">جاري جلب السيرفرات المتاحة...</div>
     <div id="servers-container"></div>
-    <iframe id="video-frame" src="" style="width:100%; height:100%; border:none; display:none;" allowfullscreen></iframe>
+    <!-- مشغل فيديو HTML5 مباشر لتفادي الشاشة السوداء -->
+    <video id="video-player" controls autoplay style="display:none;"></video>
+    <iframe id="video-frame" style="display:none;" allowfullscreen></iframe>
   </div>
 
   <script>
@@ -196,12 +204,16 @@
       const modal = document.getElementById('modal');
       const loader = document.getElementById('modal-loading');
       const serversContainer = document.getElementById('servers-container');
+      const videoPlayer = document.getElementById('video-player');
       const iframe = document.getElementById('video-frame');
 
       modal.style.display = 'flex';
       loader.innerText = 'جاري جلب السيرفرات المتاحة...';
       loader.style.display = 'block';
       serversContainer.innerHTML = '';
+      videoPlayer.pause();
+      videoPlayer.src = '';
+      videoPlayer.style.display = 'none';
       iframe.style.display = 'none';
       iframe.src = '';
 
@@ -239,6 +251,7 @@
       const modal = document.getElementById('modal');
       const loader = document.getElementById('modal-loading');
       const serversContainer = document.getElementById('servers-container');
+      const videoPlayer = document.getElementById('video-player');
       const iframe = document.getElementById('video-frame');
 
       serversContainer.innerHTML = '';
@@ -250,13 +263,17 @@
         const response = await fetch(`${API_BASE}/api/watch?url=${encodeURIComponent(currentPlayUrl)}`);
         const data = await response.json();
 
-        if (data.success && data.embedUrl) {
-          loader.style.display = 'none';
-          iframe.src = data.embedUrl;
-          iframe.style.display = 'block';
+        loader.style.display = 'none';
+        let embedUrl = data.embedUrl || currentPlayUrl;
+
+        // إذا كان الرابط ينتهي بـ mp4 أو m3u8 نشغله عبر مشغل الفيديو المباشر
+        if (embedUrl.includes('.mp4') || embedUrl.includes('.m3u8')) {
+          videoPlayer.src = embedUrl;
+          videoPlayer.style.display = 'block';
+          videoPlayer.play();
         } else {
-          loader.style.display = 'none';
-          iframe.src = currentPlayUrl;
+          // وإلا نستخدم الـ iframe كحل بديل
+          iframe.src = embedUrl;
           iframe.style.display = 'block';
         }
       } catch (err) {
@@ -266,23 +283,21 @@
       }
     }
 
-    // تفعيل البحث فقط عند الكتابة العادية من لوحة المفاتيح
     document.getElementById('search-input').addEventListener('input', (e) => {
       const query = e.target.value.toLowerCase().trim();
       filteredData = itemsData.filter(item => item.title.toLowerCase().includes(query));
       renderList(filteredData);
     });
 
-    // التحكم الأساسي بالريموت كنترول مع منع القفز إلى حقل البحث
     document.addEventListener('keydown', (e) => {
       const modal = document.getElementById('modal');
+      const videoPlayer = document.getElementById('video-player');
       const iframe = document.getElementById('video-frame');
       const searchInput = document.getElementById('search-input');
 
-      // إذا كان التركيز في خانة البحث وتم الضغط على سهم للأسفل، ننقل التركيز إلى الكروت
       if (document.activeElement === searchInput) {
         if (e.key === 'ArrowDown') {
-          searchInput.blur(); // إزالة التركيز عن خانة البحث
+          searchInput.blur();
           if (appState === 'grid') {
             const cards = document.querySelectorAll('.card');
             if (cards.length > 0) {
@@ -292,21 +307,21 @@
           }
           e.preventDefault();
         }
-        return; // السماح بالكتابة الطبيعية داخل خانة البحث
+        return;
       }
 
-      // 1. إذا كنا داخل مشغل الفيديو
       if (appState === 'player') {
         if (e.key === 'Escape' || e.keyCode === 10009 || e.keyCode === 8 || e.keyCode === 27) {
-          modal.style.display = 'none';
+          videoPlayer.pause();
+          videoPlayer.src = '';
           iframe.src = '';
+          modal.style.display = 'none';
           appState = 'grid';
           e.preventDefault();
         }
         return;
       }
 
-      // 2. إذا كنا في قائمة اختيار السيرفرات
       if (appState === 'servers') {
         const serverBtns = document.querySelectorAll('.server-btn');
         if (serverBtns.length === 0) return;
@@ -336,7 +351,6 @@
         return;
       }
 
-      // 3. الشاشة الرئيسية (قائمة الأنميات)
       const cards = document.querySelectorAll('.card');
       if (cards.length === 0) return;
 
@@ -354,7 +368,6 @@
         if (currentIndex - 4 >= 0) {
           currentIndex -= 4;
         } else {
-          // إذا كان في السطر الأول وضغط سهم لأعلى، ننتقل إلى خانة البحث
           searchInput.focus();
           cards[currentIndex].classList.remove('focused');
           e.preventDefault();
