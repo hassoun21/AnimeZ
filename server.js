@@ -57,7 +57,6 @@ app.get('/api/home', async (req, res) => {
   }
 });
 
-// 1. مسار جلب قائمة السيرفرات المتاحة للحلقة
 app.get('/api/servers', async (req, res) => {
   let targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).json({ success: false, message: 'رابط غير صالح' });
@@ -73,7 +72,6 @@ app.get('/api/servers', async (req, res) => {
     const $ = cheerio.load(response.data);
     const servers = [];
 
-    // استخراج أزرار أو خيارات السيرفرات من الصفحة (مثل Megamax وغيرها)
     $('.servers-list li, .server-item, [data-server], .load-server').each((i, el) => {
       let serverName = $(el).text().trim();
       let serverId = $(el).attr('data-id') || $(el).attr('data-server') || i;
@@ -82,9 +80,8 @@ app.get('/api/servers', async (req, res) => {
       }
     });
 
-    // إذا لم يتم العثور على قائمة سيرفرات محددة، نبحث عن الـ iframes المتاحة أو نضع السيرفر الافتراضي
     if (servers.length === 0) {
-      servers.push({ name: 'سيرفر المشاهدة الرئيسي (Megamax)', id: 'default' });
+      servers.push({ name: 'السيرفر الرئيسي (افتراضي)', id: 'default' });
     }
 
     res.json({ success: true, playUrl, servers });
@@ -93,7 +90,7 @@ app.get('/api/servers', async (req, res) => {
   }
 });
 
-// 2. مسار جلب رابط التشغيل الخاص بالسيرفر المختار
+// مسار جلب رابط الفيديو المباشر وتجنب الشاشة السوداء
 app.get('/api/watch', async (req, res) => {
   let playUrl = req.query.url;
   if (!playUrl) return res.status(400).json({ success: false, message: 'رابط غير صالح' });
@@ -106,27 +103,39 @@ app.get('/api/watch', async (req, res) => {
     });
     
     const $ = cheerio.load(response.data);
-    let embedUrl = '';
+    let videoLink = '';
 
-    $('iframe').each((i, el) => {
-      let src = $(el).attr('src') || $(el).attr('data-src');
-      if (src && !src.includes('ads') && !src.includes('analytics')) {
-        embedUrl = src;
+    // البحث داخل وسائط الـ video أو source مباشرة
+    $('video source, audio source, source').each((i, el) => {
+      let src = $(el).attr('src');
+      if (src && (src.includes('.mp4') || src.includes('m3u8') || src.includes('stream'))) {
+        videoLink = src;
         return false;
       }
     });
 
-    if (!embedUrl) {
-      embedUrl = playUrl;
+    // إذا لم نجد source، نبحث عن روابط داخل الـ iframes أو نأخذ الرابط الخارجي
+    if (!videoLink) {
+      $('iframe').each((i, el) => {
+        let src = $(el).attr('src') || $(el).attr('data-src');
+        if (src && !src.includes('ads') && !src.includes('analytics')) {
+          videoLink = src;
+          return false;
+        }
+      });
     }
 
-    if (embedUrl.startsWith('//')) {
-      embedUrl = 'https:' + embedUrl;
-    } else if (!embedUrl.startsWith('http')) {
-      embedUrl = `${TARGET_URL}${embedUrl}`;
+    if (!videoLink) {
+      videoLink = playUrl;
     }
 
-    res.json({ success: true, embedUrl });
+    if (videoLink.startsWith('//')) {
+      videoLink = 'https:' + videoLink;
+    } else if (!videoLink.startsWith('http')) {
+      videoLink = `${TARGET_URL}${videoLink}`;
+    }
+
+    res.json({ success: true, embedUrl: videoLink });
   } catch (err) {
     res.json({ success: true, embedUrl: playUrl });
   }
